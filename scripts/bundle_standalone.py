@@ -28,6 +28,7 @@ def main():
     p.add_argument("--html", required=True, help="Template HTML file containing <script src=...> placeholders")
     p.add_argument("--js", required=True, help="Main JS file to inline")
     p.add_argument("--manifest", required=True, help="JSON manifest mapping asset keys to {file, count}")
+    p.add_argument("--audio-dir", default="", help="Optional directory of .mp3 files to inline into window.SPRITE_AUDIO")
     p.add_argument("--out", required=True, help="Output standalone HTML path")
     p.add_argument("--assets-tag", default='<script src="./assets_data.js"></script>')
     p.add_argument("--js-tag", default='<script src="./demo.js"></script>')
@@ -49,11 +50,21 @@ def main():
             b64 = base64.b64encode(bf.read()).decode("ascii")
         im = Image.open(fpath)
         data_map[key] = f"data:{mime};base64,{b64}"
-        meta[key] = {"w": im.width, "h": im.height, "count": int(spec.get("count", 1))}
+        cnt = int(spec.get("count", 1))
+        meta[key] = {"w": im.width // cnt if cnt > 1 else im.width, "h": im.height, "count": cnt, "slices": cnt}
+
+    audio_map = {}
+    if a.audio_dir and os.path.isdir(a.audio_dir):
+        for fname in sorted(os.listdir(a.audio_dir)):
+            if fname.lower().endswith(".mp3"):
+                stem = os.path.splitext(fname)[0]
+                with open(os.path.join(a.audio_dir, fname), "rb") as af:
+                    audio_map[stem] = base64.b64encode(af.read()).decode("ascii")
 
     assets_js = (
-        "window.SPRITE_META = " + json.dumps(meta) + ";\n"
-        "window.SPRITE_ASSETS = " + json.dumps(data_map) + ";\n"
+        "window.SPRITE_META = " + json.dumps(meta, separators=(",", ":")) + ";\n"
+        "window.SPRITE_ASSETS = " + json.dumps(data_map, separators=(",", ":")) + ";\n"
+        + ("window.SPRITE_AUDIO = " + json.dumps(audio_map, separators=(",", ":")) + ";\n" if audio_map else "")
     ).replace("</script", "<\\/script")
 
     with open(a.html, "r", encoding="utf-8") as f:

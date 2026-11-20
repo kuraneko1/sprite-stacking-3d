@@ -29,10 +29,15 @@ Never redraw 40–60 slices + `source-in` outline on giant buffers every frame f
 1. Compute tight per-object bounding dimensions `(bw, bh)` from `diag = ceil(hypot(sw, sh))` and `liftH = ceil(count * spacing)`.
 2. Draw all slices into a reusable scratch canvas (`stackBuf`).
 3. Create a 1px silhouette mask once via `globalCompositeOperation = "source-in"` on `tintBuf`, then stamp it at `(-1,0), (+1,0), (0,-1), (0,+1)` behind the finished stack (eliminates internal dark speckles on diagonals).
-4. Cache baked canvases by `(type, angleBucket, squash, spacing, outline)`:
-   - Static/symmetric props (trees): `24` angle steps (15°)
-   - Detailed props (snowmen, crates): `48` angle steps (7.5°)
-   - Player character: `120` angle steps (3°) — apply bounce/hop as integer Y-offset rather than mutating `spacing` every frame!
+4. **Bug-Proof Cache Keys & Lazy Flash Variants**:
+   - Always include `outlineColor` and `steps` in the cache key (`${assetKey}|${outlineColor}|${steps}|${bucket}`) — never omit `outlineColor` or outlined variants (e.g. gold highlights) will collide with normal sprites!
+   - If using white hit-flash sprites (`makeFlash`), populate `entry.flash` lazily when a caller requests `makeFlash = true` on a previously cached entry whose `flash` was `null`, AND always guard blits with `(useFlash && entry.flash) ? entry.flash : entry.canvas` to prevent `drawImage(null)` crashes!
+   - Separate `hurtBlink` from dash/action `invuln` so dashing characters display their colorful 3D dash pose cleanly without flashing solid white.
+5. Cache baked canvases by `(assetKey, outlineColor, steps, angleBucket)` with LRU eviction (`~960–1100` entries for multi-frame animated casts):
+   - Static/symmetric props: `24` angle steps (15°)
+   - Animated NPCs (2 frames): `16` steps × 2 frames = `32` max per type
+   - Animated Bosses (2 frames): `24` steps × 2 frames = `48` max per type
+   - Bone-rigged Hero (7 frames): `48` steps × 7 frames = `336` max — layer runtime spring squash-and-stretch on `drawImage` rather than baking extra spacing variants!
 
 ```js
 const bakedCache = new Map();
